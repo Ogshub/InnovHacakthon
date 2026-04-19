@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="LinguaLink — AI-powered multilingual duplicate record detection using triple-signal matching and graph clustering">
+    <title>LinguaLink — Multilingual Duplicate Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=2">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-pattern"></div>
+    <div class="bg-glow glow-1"></div>
+    <div class="bg-glow glow-2"></div>
+    <div class="bg-glow glow-3"></div>
+
+    <!-- App Shell -->
+    <div class="app-shell">
+
+        <!-- ═══ SIDEBAR ═══ -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Logo -->
+            <div class="sidebar-logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="20" r="8" stroke="url(#grad1)" stroke-width="2" fill="none"/>
+                        <circle cx="28" cy="20" r="8" stroke="url(#grad2)" stroke-width="2" fill="none"/>
+                        <path d="M16 16 L24 24" stroke="url(#grad3)" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M16 24 L24 16" stroke="url(#grad3)" stroke-width="2" stroke-linecap="round"/>
+                        <defs>
+                            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#059669"/><stop offset="100%" stop-color="#10b981"/>
+                            </linearGradient>
+                            <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#22d3ee"/>
+                            </linearGradient>
+                            <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#a78bfa"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div>
+                    <h1 id="app-title">LinguaLink</h1>
+                    <p class="subtitle">Duplicate Detection</p>
+                </div>
+            </div>
+
+            <!-- Stats Pills -->
+            <div class="sidebar-stats" id="sidebar-stats">
+                <div class="stat-pill-sm">
+                    <span class="stat-label">Records</span>
+                    <span class="stat-value" id="stat-records">—</span>
+                </div>
+                <div class="stat-pill-sm">
+                    <span class="stat-label">Dupes</span>
+                    <span class="stat-value" id="stat-pairs">—</span>
+                </div>
+                <div class="stat-pill-sm">
+                    <span class="stat-label">Clusters</span>
+                    <span class="stat-value" id="stat-clusters">—</span>
+                </div>
+                <div class="stat-pill-sm accent">
+                    <span class="stat-label">Time</span>
+                    <span class="stat-value" id="stat-time">—</span>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Load Demo Card -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span class="section-icon">🚀</span>
+                    <span class="section-label">Analyze Dataset</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Dataset</label>
+                    <select id="dataset-selector" class="form-control">
+                        <option value="ultra_complex_multilingual_dataset.csv">Global Names (21K+)</option>
+                        <option value="ecommerce_multilingual.csv">E-Commerce Products</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Sample Size</label>
+                        <input type="number" id="sample-size" value="200" min="50" max="1000" step="50" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Threshold</label>
+                        <input type="number" id="threshold" value="0.55" min="0.3" max="0.95" step="0.05" class="form-control">
+                    </div>
+                </div>
+                <button id="btn-demo" class="btn-primary" onclick="loadDemo()">
+                    <span class="btn-text">▶ Run Analysis</span>
+                    <span class="btn-loader" style="display:none"></span>
+                </button>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Upload Card -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span class="section-icon">📁</span>
+                    <span class="section-label">Upload CSV / JSON</span>
+                </div>
+                <div class="upload-zone" id="upload-zone">
+                    <input type="file" id="file-input" accept=".csv,.json" style="display:none">
+                    <p>Drop file or <span class="upload-link" onclick="document.getElementById('file-input').click()">browse</span></p>
+                </div>
+                <button id="btn-upload" class="btn-secondary" onclick="uploadFile()" disabled>
+                    Upload &amp; Analyze
+                </button>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Live Search -->
+            <div class="sidebar-section sidebar-search">
+                <div class="section-header">
+                    <span class="section-icon">🔍</span>
+                    <span class="section-label">Live Search</span>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder='Try "Login issue" or "ログイン"'>
+                    <button id="btn-search" onclick="searchDuplicates()">→</button>
+                </div>
+                <div id="search-results" class="search-results"></div>
+            </div>
+
+            <!-- Methodology (collapsible) -->
+            <div class="sidebar-divider"></div>
+            <div class="sidebar-section">
+                <div class="section-header collapsible-trigger" onclick="toggleMethodology()" id="method-trigger">
+                    <span class="section-icon">🧠</span>
+                    <span class="section-label">How It Works</span>
+                    <span class="collapse-arrow" id="method-arrow">▸</span>
+                </div>
+                <div id="methodology-panel" class="methodology-panel" style="display:none">
+                    <div class="method-item">
+                        <div class="method-badge">01 · Semantic · 55%</div>
+                        <p>LaBSE embeddings — language-agnostic meaning across 109+ languages.</p>
+                    </div>
+                    <div class="method-item">
+                        <div class="method-badge">02 · Phonetic · 25%</div>
+                        <p>Cross-script transliteration to catch pronunciation-level matches.</p>
+                    </div>
+                    <div class="method-item">
+                        <div class="method-badge">03 · Structural · 20%</div>
+                        <p>Fuzzy token-sort ratio to handle typos &amp; abbreviations.</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ═══ MAIN PANEL ═══ -->
+        <main class="main-panel">
+
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <span id="top-bar-title" class="top-bar-title">Ready — select a dataset and click Run Analysis</span>
+                </div>
+                <div class="top-bar-right" id="viz-tabs-bar" style="display:none">
+                    <button class="viz-tab active" id="tab-graph" onclick="switchTab('graph')">
+                        <span class="tab-icon">🕸️</span> Network
+                    </button>
+                    <button class="viz-tab" id="tab-heatmap" onclick="switchTab('heatmap')">
+                        <span class="tab-icon">🔥</span> Heatmap
+                    </button>
+                    <button class="viz-tab" id="tab-clusters" onclick="switchTab('clusters')">
+                        <span class="tab-icon">📊</span> Charts
+                    </button>
+                    <button class="viz-tab" id="tab-results" onclick="switchTab('results')">
+                        <span class="tab-icon">🔗</span> Clusters
+                    </button>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" id="empty-state">
+                <div class="empty-icon">🌐</div>
+                <h2>No analysis yet</h2>
+                <p>Choose a dataset in the sidebar and click <strong>Run Analysis</strong> to begin.</p>
+                <div class="empty-tips">
+                    <div class="tip">🚀 Start with <strong>200 records</strong> for a quick demo</div>
+                    <div class="tip">🔍 Use <strong>Live Search</strong> to query any language</div>
+                    <div class="tip">📁 Or <strong>upload your own CSV</strong> with a "name" column</div>
+                </div>
+            </div>
+
+            <!-- Graph Panel -->
+            <div class="viz-panel" id="panel-graph" style="display:none">
+                <div class="graph-controls">
+                    <div class="legend" id="language-legend"></div>
+                    <div class="graph-actions">
+                        <button class="btn-icon" onclick="resetGraph()" title="Reset zoom">↺</button>
+                        <button class="btn-icon" onclick="toggleLabels()" title="Toggle labels">Aa</button>
+                    </div>
+                </div>
+                <div id="graph-container" class="graph-container"></div>
+            </div>
+
+            <!-- Heatmap Panel -->
+            <div class="viz-panel" id="panel-heatmap" style="display:none">
+                <div id="heatmap-container" class="heatmap-container"></div>
+            </div>
+
+            <!-- Charts Panel -->
+            <div class="viz-panel" id="panel-clusters" style="display:none">
+                <div class="charts-grid">
+                    <div class="chart-card" id="lang-chart-card">
+                        <h3>Language Distribution</h3>
+                        <div id="lang-chart"></div>
+                    </div>
+                    <div class="chart-card" id="cluster-chart-card">
+                        <h3>Top Duplicate Clusters</h3>
+                        <div id="cluster-chart"></div>
+                    </div>
+                    <div class="chart-card" id="signal-chart-card">
+                        <h3>Signal Contribution</h3>
+                        <div id="signal-chart"></div>
+                    </div>
+                    <div class="chart-card" id="type-chart-card">
+                        <h3>Duplicate Type Distribution</h3>
+                        <div id="type-chart"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results / Clusters Panel -->
+            <div class="viz-panel results-panel" id="panel-results" style="display:none">
+                <div class="results-header">
+                    <h2 class="section-title">
+                        <span class="title-icon">🔗</span>
+                        Detected Duplicate Clusters
+                        <span class="cluster-count" id="cluster-count-badge"></span>
+                    </h2>
+                    <div class="results-filter">
+                        <input type="text" id="cluster-filter" placeholder="Filter clusters..." class="filter-input" oninput="filterClusters(this.value)">
+                    </div>
+                </div>
+                <div id="clusters-container" class="clusters-container"></div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display:none">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h2>Processing with Triple-Signal Engine</h2>
+            <div class="loading-steps">
+                <div class="step" id="step-1"><div class="step-dot"></div><span>Computing LaBSE Semantic Embeddings...</span></div>
+                <div class="step" id="step-2"><div class="step-dot"></div><span>Generating Phonetic Fingerprints...</span></div>
+                <div class="step" id="step-3"><div class="step-dot"></div><span>Running Structural Fuzzy Matching...</span></div>
+                <div class="step" id="step-4"><div class="step-dot"></div><span>Fusing Signals &amp; Building Graph...</span></div>
+                <div class="step" id="step-5"><div class="step-dot"></div><span>Louvain Community Detection...</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip" style="display:none"></div>
+
+    <script src="app.js?v=2"></script>
+    <script src="graph.js?v=2"></script>
+    <script src="heatmap.js?v=2"></script>
+    <script src="charts.js?v=2"></script>
+</body>
+</html>
