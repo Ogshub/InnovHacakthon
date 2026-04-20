@@ -7,7 +7,13 @@ function renderHeatmap(data) {
     container.innerHTML = '';
     
     // Build a subset of records for the heatmap (top clusters)
-    const topClusters = data.clusters.slice(0, 8);
+    const topClusters = data.clusters
+        .slice()
+        .sort((a, b) => {
+            if (b.size !== a.size) return b.size - a.size;
+            return (b.avg_confidence || 0) - (a.avg_confidence || 0);
+        })
+        .slice(0, 10);
     const memberIndices = new Set();
     topClusters.forEach(c => c.members.forEach(m => memberIndices.add(m)));
     
@@ -19,13 +25,28 @@ function renderHeatmap(data) {
     }
     
     // Limit to 50 for readability
-    const subset = records.slice(0, 50);
+    const subset = records.slice(0, 60);
     const n = subset.length;
     
     // Build similarity matrix from edges
     const simMatrix = Array.from({ length: n }, () => Array(n).fill(0));
     const idxMap = {};
     subset.forEach((r, i) => { idxMap[r.idx] = i; });
+
+    // Build edge lookup for rich tooltips
+    const edgeIndex = data._edgeIndex || (() => {
+        const map = new Map();
+        (data.edges || []).forEach(e => {
+            const s = e.source;
+            const t = e.target;
+            if (typeof s === 'number' && typeof t === 'number') {
+                const key = `${Math.min(s, t)}|${Math.max(s, t)}`;
+                map.set(key, e);
+            }
+        });
+        return map;
+    })();
+    const getEdge = (a, b) => edgeIndex.get(`${Math.min(a, b)}|${Math.max(a, b)}`);
     
     data.edges.forEach(e => {
         const si = idxMap[e.source];
@@ -109,14 +130,44 @@ function renderHeatmap(data) {
                 .on('mouseover', function(event) {
                     d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5);
                     tooltip.style.display = 'block';
+
+                    const a = subset[i];
+                    const b = subset[j];
+                    const edge = getEdge(a.idx, b.idx);
+                    const fused = edge ? (edge.fused_score ?? 0) : val;
+                    const sem = edge ? (edge.semantic ?? 0) : null;
+                    const phon = edge ? (edge.phonetic ?? 0) : null;
+                    const st = edge ? (edge.structural ?? 0) : null;
+
                     tooltip.innerHTML = `
-                        <div class="tooltip-title">${escapeHtml(subset[i].name)}</div>
+                        <div class="tooltip-title">${escapeHtml(a.name)} <span style="opacity:0.7;font-weight:600">(${escapeHtml(a.language || '')})</span></div>
                         <div style="margin-bottom:4px;font-size:0.75rem;color:var(--text-muted)">↕</div>
-                        <div class="tooltip-title">${escapeHtml(subset[j].name)}</div>
+                        <div class="tooltip-title">${escapeHtml(b.name)} <span style="opacity:0.7;font-weight:600">(${escapeHtml(b.language || '')})</span></div>
                         <div class="tooltip-row">
                             <span class="tooltip-label">Fused Score</span>
-                            <span class="tooltip-value">${(val * 100).toFixed(1)}%</span>
+                            <span class="tooltip-value">${(fused * 100).toFixed(1)}%</span>
                         </div>
+                        ${edge ? `
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Semantic</span>
+                            <span class="tooltip-value">${(sem * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Phonetic</span>
+                            <span class="tooltip-value">${(phon * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Structural</span>
+                            <span class="tooltip-value">${(st * 100).toFixed(0)}%</span>
+                        </div>
+                        ` : `
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Edge details</span>
+                            <span class="tooltip-value">Not in graph</span>
+                        </div>
+                        `}
+                        ${a.translated_to_en ? `<div style="margin-top:6px;font-size:0.72rem;color:var(--text-secondary);font-style:italic">→ ${escapeHtml(a.translated_to_en)}</div>` : ''}
+                        ${b.translated_to_en ? `<div style="font-size:0.72rem;color:var(--text-secondary);font-style:italic">→ ${escapeHtml(b.translated_to_en)}</div>` : ''}
                     `;
                 })
                 .on('mousemove', function(event) {

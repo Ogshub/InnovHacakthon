@@ -8,6 +8,34 @@ let appState = {
     showLabels: true,
 };
 
+function buildRecordIndex(records) {
+    const map = new Map();
+    (records || []).forEach(r => map.set(r.idx, r));
+    return map;
+}
+
+function edgeKey(a, b) {
+    const s = Math.min(a, b);
+    const t = Math.max(a, b);
+    return `${s}|${t}`;
+}
+
+function buildEdgeIndex(edges) {
+    const map = new Map();
+    (edges || []).forEach(e => {
+        const s = e.source ?? e.i ?? e.from;
+        const t = e.target ?? e.j ?? e.to;
+        if (typeof s === 'number' && typeof t === 'number') {
+            map.set(edgeKey(s, t), e);
+        }
+    });
+    return map;
+}
+
+function getEdgeBetween(edgeIndex, a, b) {
+    return edgeIndex.get(edgeKey(a, b));
+}
+
 // Language color map
 const LANG_COLORS = {
     'English':    '#3b82f6',
@@ -227,6 +255,10 @@ function renderSearchResults(results) {
 
 // ---- Render Results ----
 function renderResults(data) {
+    // Build quick lookup indices
+    data._recordIndex = buildRecordIndex(data.records);
+    data._edgeIndex = buildEdgeIndex(data.edges);
+
     // Update sidebar stats
     document.getElementById('stat-records').textContent = data.total_records;
     document.getElementById('stat-pairs').textContent = data.total_pairs.toLocaleString();
@@ -268,15 +300,96 @@ function renderLanguageLegend(data) {
 }
 
 // ---- Cluster Results ----
+function computeClusterLanguages(members) {
+    const counts = new Map();
+    members.forEach(m => {
+        const lang = m?.language || 'Unknown';
+        counts.set(lang, (counts.get(lang) || 0) + 1);
+    });
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function renderLanguagePills(langCounts) {
+    return `
+        <div class="cluster-pills">
+            ${langCounts.slice(0, 6).map(([lang, count]) => {
+                const color = getLangColor(lang);
+                return `<span class="pill" style="background:${color}18;border-color:${color}33;color:${color}">
+                    ${escapeHtml(lang)} <span class="pill-count">${count}</span>
+                </span>`;
+            }).join('')}
+            ${langCounts.length > 6 ? `<span class="pill pill-more">+${langCounts.length - 6} more</span>` : ''}
+        </div>
+    `;
+}
+
+function renderEdgeEvidenceTable(edges, recordIndex, limit = 12) {
+    if (!edges || edges.length === 0) {
+        return `<div class="cluster-evidence-empty">No scored edges found inside this cluster (threshold may be high).</div>`;
+    }
+
+    const top = edges
+        .slice()
+        .sort((a, b) => (b.fused_score ?? b.fused ?? 0) - (a.fused_score ?? a.fused ?? 0))
+        .slice(0, limit);
+
+    return `
+        <div class="cluster-evidence-table">
+            <div class="evidence-row evidence-header">
+                <span>Pair</span>
+                <span>Fused</span>
+                <span>Sem</span>
+                <span>Phon</span>
+                <span>Struct</span>
+            </div>
+            ${top.map(e => {
+                const s = e.source;
+                const t = e.target;
+                const a = recordIndex.get(s);
+                const b = recordIndex.get(t);
+                const fused = e.fused_score ?? e.fused ?? 0;
+                const sem = e.semantic ?? e.semantic_score ?? 0;
+                const phon = e.phonetic ?? e.phonetic_score ?? 0;
+                const st = e.structural ?? e.structural_score ?? 0;
+                return `
+                    <div class="evidence-row">
+                        <span class="evidence-pair">
+                            <span class="evidence-name">${escapeHtml(a?.name || `#${s}`)}</span>
+                            <span class="evidence-sep">↔</span>
+                            <span class="evidence-name">${escapeHtml(b?.name || `#${t}`)}</span>
+                        </span>
+                        <span class="evidence-num">${(fused * 100).toFixed(1)}%</span>
+                        <span class="evidence-num">${(sem * 100).toFixed(0)}%</span>
+                        <span class="evidence-num">${(phon * 100).toFixed(0)}%</span>
+                        <span class="evidence-num">${(st * 100).toFixed(0)}%</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
 function renderClusterCards(clusters, data) {
+    const recordIndex = data._recordIndex || buildRecordIndex(data.records);
+    const edgeIndex = data._edgeIndex || buildEdgeIndex(data.edges);
+
     return clusters.map((cluster, ci) => {
-        const members = cluster.members.map(idx => data.records.find(r => r.idx === idx)).filter(Boolean);
+        const members = (cluster.members || []).map(idx => recordIndex.get(idx)).filter(Boolean);
         const confidence = (cluster.avg_confidence * 100).toFixed(1);
         const translations = [...new Set(members.map(m => m.translated_to_en).filter(Boolean))];
-        const mainTranslation = translations[0] || 'Unknown';
+        const mainTranslation = translations[0] || (members[0]?.translated_to_en) || (members[0]?.name) || 'Unknown';
         const confidenceColor = cluster.avg_confidence > 0.75 ? 'var(--accent-green)'
                               : cluster.avg_confidence > 0.6  ? 'var(--accent-amber)'
                               : 'var(--accent-red)';
+
+        const langCounts = computeClusterLanguages(members);
+        const memberIds = new Set((cluster.members || []));
+        const internalEdges = (data.edges || []).filter(e => memberIds.has(e.source) && memberIds.has(e.target));
+
+        // compute quick stats
+        const internalEdgeCount = internalEdges.length;
+        const uniqueTranslations = translations.slice(0, 4);
+
         return `
             <div class="cluster-card">
                 <div class="cluster-header">
@@ -285,7 +398,21 @@ function renderClusterCards(clusters, data) {
                         <span class="cluster-name">${escapeHtml(mainTranslation)}</span>
                         <span class="cluster-size">${cluster.size} records</span>
                     </div>
-                    <span class="cluster-confidence" style="color:${confidenceColor}">${confidence}%</span>
+                    <div class="cluster-header-right">
+                        <span class="cluster-confidence" style="color:${confidenceColor}">${confidence}%</span>
+                        <span class="cluster-chevron">▾</span>
+                    </div>
+                </div>
+                <div class="cluster-subheader">
+                    ${renderLanguagePills(langCounts)}
+                    <div class="cluster-submeta">
+                        <span class="submeta-item"><strong>${internalEdgeCount}</strong> scored pairs</span>
+                        <span class="submeta-item"><strong>${langCounts.length}</strong> languages</span>
+                    </div>
+                    ${uniqueTranslations.length ? `<div class="cluster-translations">
+                        ${uniqueTranslations.map(t => `<span class="translation-chip">“${escapeHtml(t)}”</span>`).join('')}
+                        ${translations.length > uniqueTranslations.length ? `<span class="translation-chip more">+${translations.length - uniqueTranslations.length} more</span>` : ''}
+                    </div>` : ''}
                 </div>
                 <div class="cluster-members collapsed">
                     <div class="member-row header-row">
@@ -300,6 +427,12 @@ function renderClusterCards(clusters, data) {
                             <span class="member-type">${m.duplicate_type || ''}</span>
                         </div>`;
                     }).join('')}
+
+                    <div class="cluster-evidence">
+                        <div class="cluster-evidence-title">Top evidence (pair scores inside this cluster)</div>
+                        ${renderEdgeEvidenceTable(internalEdges, recordIndex, 14)}
+                        <div class="cluster-evidence-hint">Tip: use this to justify why these records were grouped (fused + per-signal).</div>
+                    </div>
                 </div>
             </div>`;
     }).join('');
@@ -310,7 +443,10 @@ function renderClusters(data) {
     const badge = document.getElementById('cluster-count-badge');
     badge.textContent = `${data.total_clusters} clusters`;
 
-    const clusters = data.clusters.sort((a, b) => b.size - a.size).slice(0, 30);
+    const clusters = data.clusters.slice().sort((a, b) => {
+        if (b.size !== a.size) return b.size - a.size;
+        return (b.avg_confidence || 0) - (a.avg_confidence || 0);
+    }).slice(0, 80);
     allClustersHTML = renderClusterCards(clusters, data);
     container.innerHTML = allClustersHTML;
     reattachClusterToggles();
@@ -347,6 +483,27 @@ function resetGraph() {
 
 // ---- Cluster Filter ----
 let allClustersHTML = '';
+let clusterToggleDelegationBound = false;
+
+function ensureClusterToggleDelegation() {
+    if (clusterToggleDelegationBound) return;
+    clusterToggleDelegationBound = true;
+
+    document.addEventListener('click', (event) => {
+        const header = event.target.closest('.cluster-header');
+        if (!header) return;
+
+        const card = header.closest('.cluster-card');
+        if (!card) return;
+
+        const members = card.querySelector('.cluster-members');
+        if (!members) return;
+
+        members.classList.toggle('collapsed');
+        card.classList.toggle('expanded', !members.classList.contains('collapsed'));
+    });
+}
+
 function filterClusters(query) {
     const container = document.getElementById('clusters-container');
     if (!query.trim()) {
@@ -358,9 +515,13 @@ function filterClusters(query) {
     const cards = Array.from(container.querySelectorAll('.cluster-card'));
     // We need to rebuild from stored data
     if (!appState.data) return;
-    const clusters = appState.data.clusters.sort((a,b)=>b.size-a.size).slice(0,30);
+    const clusters = appState.data.clusters.slice().sort((a, b) => {
+        if (b.size !== a.size) return b.size - a.size;
+        return (b.avg_confidence || 0) - (a.avg_confidence || 0);
+    }).slice(0, 200);
     const filtered = clusters.filter(cluster => {
-        const members = cluster.members.map(idx => appState.data.records.find(r => r.idx === idx)).filter(Boolean);
+        const recordIndex = appState.data._recordIndex || buildRecordIndex(appState.data.records);
+        const members = (cluster.members || []).map(idx => recordIndex.get(idx)).filter(Boolean);
         return members.some(m =>
             (m.name && m.name.toLowerCase().includes(q)) ||
             (m.language && m.language.toLowerCase().includes(q)) ||
@@ -372,9 +533,8 @@ function filterClusters(query) {
 }
 
 function reattachClusterToggles() {
-    document.querySelectorAll('.cluster-header').forEach(header => {
-        header.onclick = () => header.parentElement.querySelector('.cluster-members').classList.toggle('collapsed');
-    });
+    // Intentionally no-op: cluster toggle is handled by delegated click listener
+    // in ensureClusterToggleDelegation(), which is robust across rerenders.
 }
 
 // ---- Methodology Toggle ----
@@ -480,4 +640,7 @@ function initIdleParticles() {
 }
 
 // Start immediately
-window.addEventListener('load', initIdleParticles);
+window.addEventListener('load', () => {
+    ensureClusterToggleDelegation();
+    initIdleParticles();
+});
