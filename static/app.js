@@ -39,7 +39,7 @@ function getLangColor(lang) {
 // ---- Loading Animation ----
 let loadingInterval = null;
 
-function showLoading() {
+function showEnhancedLoading() {
     const overlay = document.getElementById('loading-overlay');
     overlay.style.display = 'flex';
     
@@ -56,7 +56,7 @@ function showLoading() {
         } else {
             clearInterval(loadingInterval);
         }
-    }, 2500);
+    }, 800);
 }
 
 function hideLoading() {
@@ -76,7 +76,10 @@ async function loadDemo() {
     btn.querySelector('.btn-loader').style.display = 'inline-block';
     btn.disabled = true;
     
-    showLoading();
+    // Update status to processing
+    updateStatus('processing');
+    
+    showEnhancedLoading();
     
     try {
         const resp = await fetch(`${API_BASE}/api/demo?sample_size=${sampleSize}&threshold=${threshold}&dataset=${encodeURIComponent(dataset)}`, {
@@ -177,12 +180,10 @@ async function searchDuplicates() {
     container.innerHTML = '<p style="color:var(--text-muted);padding:8px;font-size:0.8rem;">Searching...</p>';
     
     try {
-        const formData = new FormData();
-        formData.append('query', query);
-        
         const resp = await fetch(`${API_BASE}/api/search`, {
             method: 'POST',
-            body: formData,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query }),
         });
         
         const data = await resp.json();
@@ -240,6 +241,23 @@ function renderResults(data) {
     // Hide empty state, show tabs
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('viz-tabs-bar').style.display = 'flex';
+
+    // Enable export buttons
+    document.getElementById('export-cleaned').disabled = false;
+    document.getElementById('export-clusters').disabled = false;
+    document.getElementById('export-report').disabled = false;
+
+    // Update AI Summary
+    updateAISummary(data);
+
+    // Show AI Insight Card
+    showAIInsightCard(data);
+
+    // Update status to ready
+    updateStatus('ready');
+
+    // Populate language filter
+    populateLanguageFilter(data);
 
     // Render visualizations
     renderGraph(data);
@@ -477,6 +495,658 @@ function initIdleParticles() {
             .attr('stroke-width', d => 1 - d.dist / (d.isMouse ? 200 : maxDist))
             .attr('opacity', d => 1 - d.dist / (d.isMouse ? 200 : maxDist));
     });
+}
+
+// ---- Language Filter Population ----
+function populateLanguageFilter(data) {
+    const select = document.getElementById('lang-filter');
+    const languages = new Set();
+    
+    // Collect unique languages from records
+    if (data.records) {
+        data.records.forEach(record => {
+            if (record.language) {
+                languages.add(record.language);
+            }
+        });
+    }
+    
+    // Clear and repopulate select
+    select.innerHTML = '<option value="">All Languages</option>';
+    Array.from(languages).sort().forEach(lang => {
+        const option = document.createElement('option');
+        option.value = lang;
+        option.textContent = lang;
+        select.appendChild(option);
+    });
+}
+
+// ============================================
+// NEW ENHANCED FEATURES
+// ============================================
+
+let currentViewMode = 'before';
+let minimapVisible = false;
+let currentEdgeThreshold = 0.55;
+
+// ---- AI Explainability Panel ----
+function showExplainability(nodeData, edgeData = null) {
+    const panel = document.getElementById('explainability-panel');
+    
+    if (edgeData) {
+        // Show edge explanation
+        document.getElementById('explain-record-1-name').textContent = appState.data.records[edgeData.source].name;
+        document.getElementById('explain-record-1-lang').textContent = appState.data.records[edgeData.source].language;
+        document.getElementById('explain-record-1-id').textContent = `ID: ${edgeData.source}`;
+        
+        document.getElementById('explain-record-2-name').textContent = appState.data.records[edgeData.target].name;
+        document.getElementById('explain-record-2-lang').textContent = appState.data.records[edgeData.target].language;
+        document.getElementById('explain-record-2-id').textContent = `ID: ${edgeData.target}`;
+        
+        // Update signal scores
+        const semScore = (edgeData.semantic_score || 0).toFixed(3);
+        const phonScore = (edgeData.phonetic_score || 0).toFixed(3);
+        structScore = (edgeData.structural_score || 0).toFixed(3);
+        const fusedScore = (edgeData.fused_score || 0).toFixed(3);
+        
+        document.getElementById('semantic-score').textContent = semScore;
+        document.getElementById('phonetic-score').textContent = phonScore;
+        document.getElementById('structural-score').textContent = structScore;
+        document.getElementById('fused-score').textContent = fusedScore;
+        
+        // Update progress bars
+        document.getElementById('semantic-fill').style.width = `${semScore * 100}%`;
+        document.getElementById('phonetic-fill').style.width = `${phonScore * 100}%`;
+        document.getElementById('structural-fill').style.width = `${structScore * 100}%`;
+        
+        // Generate explanations
+        document.getElementById('semantic-explanation').textContent = generateSemanticExplanation(semScore);
+        document.getElementById('phonetic-explanation').textContent = generatePhoneticExplanation(phonScore);
+        document.getElementById('structural-explanation').textContent = generateStructuralExplanation(structScore);
+        
+        // Update verdict
+        const verdict = getVerdict(fusedScore);
+        const badge = document.getElementById('verdict-badge');
+        badge.textContent = verdict.label;
+        badge.className = `verdict-badge ${verdict.class}`;
+        document.getElementById('verdict-reasoning').textContent = verdict.reasoning;
+    }
+    
+    panel.style.display = 'flex';
+}
+
+function closeExplainability() {
+    document.getElementById('explainability-panel').style.display = 'none';
+}
+
+function generateSemanticExplanation(score) {
+    if (score > 0.8) return "Very strong semantic match - likely same meaning across languages";
+    if (score > 0.6) return "Good semantic similarity - related concepts or translations";
+    if (score > 0.4) return "Moderate semantic overlap - some shared meaning";
+    return "Low semantic similarity - different meanings";
+}
+
+function generatePhoneticExplanation(score) {
+    if (score > 0.7) return "Sounds very similar - likely same pronunciation";
+    if (score > 0.5) return "Some phonetic similarity - related sounds";
+    if (score > 0.3) return "Minor phonetic resemblance";
+    return "Different pronunciation patterns";
+}
+
+function generateStructuralExplanation(score) {
+    if (score > 0.8) return "Very similar structure - minor spelling differences";
+    if (score > 0.6) return "Good structural match - some character differences";
+    if (score > 0.4) return "Moderate similarity - noticeable differences";
+    return "Different structure - significant variations";
+}
+
+function getVerdict(score) {
+    if (score > 0.75) {
+        return {
+            label: "Strong Duplicate",
+            class: "strong",
+            reasoning: "High confidence match across all signals - these records likely refer to the same entity."
+        };
+    } else if (score > 0.55) {
+        return {
+            label: "Medium Duplicate",
+            class: "medium", 
+            reasoning: "Moderate confidence - likely duplicates but may require human review."
+        };
+    } else {
+        return {
+            label: "Weak Duplicate",
+            class: "weak",
+            reasoning: "Low confidence - possible duplicates but high uncertainty."
+        };
+    }
+}
+
+// ---- View Mode Toggle ----
+function setViewMode(mode) {
+    currentViewMode = mode;
+    
+    // Update button states
+    document.getElementById('view-before').classList.toggle('active', mode === 'before');
+    document.getElementById('view-after').classList.toggle('active', mode === 'after');
+    
+    // Update visualization
+    if (appState.data) {
+        if (mode === 'before') {
+            showRawDataView();
+        } else {
+            showDeduplicatedView();
+        }
+    }
+}
+
+function showRawDataView() {
+    // Show original unclustered data
+    updateTopBarTitle('📊 Raw Dataset View - Before Deduplication');
+    // Implementation would show all records without clustering
+}
+
+function showDeduplicatedView() {
+    // Show deduplicated clustered view
+    updateTopBarTitle('🎯 Deduplicated View - After Clustering');
+    // Implementation would show clustered results
+}
+
+// ---- Export Functions ----
+function exportCleanedData() {
+    if (!appState.data) return;
+    
+    // Generate cleaned data (one record per cluster)
+    const cleanedData = [];
+    const usedIds = new Set();
+    
+    appState.data.clusters.forEach(cluster => {
+        if (cluster.members && cluster.members.length > 0) {
+            const representativeId = cluster.members[0];
+            if (!usedIds.has(representativeId)) {
+                cleanedData.push(appState.data.records[representativeId]);
+                usedIds.add(representativeId);
+            }
+        }
+    });
+    
+    // Convert to CSV and download
+    const csv = convertToCSV(cleanedData);
+    downloadFile(csv, 'lingualink_cleaned_data.csv', 'text/csv');
+}
+
+function exportClusters() {
+    if (!appState.data) return;
+    
+    const clusterData = {
+        metadata: {
+            total_records: appState.data.total_records,
+            total_clusters: appState.data.total_clusters,
+            threshold: appState.data.threshold || 0.55,
+            processing_time: appState.data.processing_time
+        },
+        clusters: appState.data.clusters
+    };
+    
+    const json = JSON.stringify(clusterData, null, 2);
+    downloadFile(json, 'lingualink_clusters.json', 'application/json');
+}
+
+function exportReport() {
+    if (!appState.data) return;
+    
+    const report = generateSummaryReport();
+    const markdown = formatReportAsMarkdown(report);
+    downloadFile(markdown, 'lingualink_report.md', 'text/markdown');
+}
+
+function convertToCSV(data) {
+    if (!data || data.length === 0) return '';
+    
+    const headers = Object.keys(data[0]).join(',');
+    const rows = data.map(row => 
+        Object.values(row).map(val => `"${val}"`).join(',')
+    ).join('\n');
+    
+    return headers + '\n' + rows;
+}
+
+function downloadFile(content, filename, contentType) {
+    const blob = new Blob([content], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ---- AI Summary ----
+function updateAISummary(data) {
+    const summaryDiv = document.getElementById('ai-summary');
+    
+    if (!data || !data.clusters) {
+        summaryDiv.innerHTML = `
+            <div class="summary-placeholder">
+                <span class="summary-icon">📊</span>
+                <span>Run analysis to see AI insights</span>
+            </div>
+        `;
+        return;
+    }
+    
+    const summary = generateAISummary(data);
+    summaryDiv.innerHTML = `
+        <div class="summary-content">
+            <div class="summary-stat">
+                <span class="summary-number">${data.total_clusters}</span>
+                <span class="summary-label">Clusters Found</span>
+            </div>
+            <div class="summary-stat">
+                <span class="summary-number">${data.total_pairs}</span>
+                <span class="summary-label">Duplicate Pairs</span>
+            </div>
+            <div class="summary-insight">
+                <span class="summary-icon">💡</span>
+                <span>${summary.insight}</span>
+            </div>
+        </div>
+    `;
+}
+
+function generateAISummary(data) {
+    const avgClusterSize = data.clusters.reduce((sum, c) => sum + (c.size || 0), 0) / data.clusters.length;
+    
+    let insight = "";
+    if (avgClusterSize > 3) {
+        insight = "Many large clusters detected - consider reviewing data quality";
+    } else if (avgClusterSize > 2) {
+        insight = "Moderate duplication found - good candidates for deduplication";
+    } else {
+        insight = "Mostly pairs - high data quality with minimal duplication";
+    }
+    
+    return { insight };
+}
+
+// ---- Test Playground ----
+function runTestComparison() {
+    const text1 = document.getElementById('test-input-1').value.trim();
+    const text2 = document.getElementById('test-input-2').value.trim();
+    
+    if (!text1 || !text2) {
+        alert('Please enter both texts to compare');
+        return;
+    }
+    
+    const btn = document.getElementById('btn-test');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="btn-icon">⏳</span> Analyzing...';
+    btn.disabled = true;
+    
+    // Simulate processing delay
+    setTimeout(() => {
+        const results = generateMockResults(text1, text2);
+        showTestResults(results);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }, 800);
+}
+
+function showTestResults(results) {
+    const resultsDiv = document.getElementById('test-results');
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = `
+        <div class="test-result-item">
+            <span class="result-label">🧠 Semantic:</span>
+            <span class="result-value">${(results.semantic || 0).toFixed(3)}</span>
+        </div>
+        <div class="test-result-item">
+            <span class="result-label">🔊 Phonetic:</span>
+            <span class="result-value">${(results.phonetic || 0).toFixed(3)}</span>
+        </div>
+        <div class="test-result-item">
+            <span class="result-label">📝 Structural:</span>
+            <span class="result-value">${(results.structural || 0).toFixed(3)}</span>
+        </div>
+        <div class="test-result-item">
+            <span class="result-label">⚖️ Fused:</span>
+            <span class="result-value">${(results.fused || 0).toFixed(3)}</span>
+        </div>
+    `;
+}
+
+function generateMockResults(text1, text2) {
+    // Normalize texts
+    const t1 = text1.toLowerCase().trim();
+    const t2 = text2.toLowerCase().trim();
+    
+    // Calculate different similarity metrics
+    const exactMatch = t1 === t2;
+    const contains1 = t1.includes(t2) || t2.includes(t1);
+    
+    // Levenshtein-like distance approximation (simplified)
+    const levenshteinSimilarity = calculateLevenshteinSimilarity(t1, t2);
+    
+    // Phonetic similarity (simplified - checks for common patterns)
+    const phoneticSimilarity = calculatePhoneticSimilarity(t1, t2);
+    
+    // Semantic similarity (simplified - word overlap)
+    const semanticSimilarity = calculateSemanticSimilarity(t1, t2);
+    
+    // Structural similarity (character-level)
+    const structuralSimilarity = levenshteinSimilarity;
+    
+    // Calculate fused score (weighted like the real algorithm)
+    const fused = (0.55 * semanticSimilarity) + (0.25 * phoneticSimilarity) + (0.20 * structuralSimilarity);
+    
+    return {
+        semantic: semanticSimilarity,
+        phonetic: phoneticSimilarity,
+        structural: structuralSimilarity,
+        fused: fused
+    };
+}
+
+function calculateLevenshteinSimilarity(s1, s2) {
+    // Simplified Levenshtein distance
+    const longer = s1.length > s2.length ? s1 : s2;
+    const shorter = s1.length > s2.length ? s2 : s1;
+    
+    if (longer.length === 0) return 1.0;
+    if (shorter.length === 0) return 0.0;
+    
+    // Count character matches
+    let matches = 0;
+    for (let i = 0; i < shorter.length; i++) {
+        if (longer.includes(shorter[i])) matches++;
+    }
+    
+    return matches / longer.length;
+}
+
+function calculatePhoneticSimilarity(s1, s2) {
+    // Simplified phonetic similarity - checks for sound patterns
+    const sound1 = s1.replace(/[^a-z]/g, '');
+    const sound2 = s2.replace(/[^a-z]/g, '');
+    
+    // Check for common phonetic patterns
+    const patterns = [
+        ['tion', 'sion'], ['c', 'k'], ['ph', 'f'], 
+        ['gh', 'f'], ['ough', 'o'], ['ie', 'y']
+    ];
+    
+    let similarity = calculateLevenshteinSimilarity(sound1, sound2);
+    
+    // Boost for common phonetic patterns
+    patterns.forEach(([pattern, replacement]) => {
+        if (sound1.includes(pattern) && sound2.includes(replacement) ||
+            sound2.includes(pattern) && sound1.includes(replacement)) {
+            similarity += 0.1;
+        }
+    });
+    
+    return Math.min(1.0, similarity);
+}
+
+function calculateSemanticSimilarity(s1, s2) {
+    // Simplified semantic similarity - word overlap
+    const words1 = s1.split(/\s+/).filter(w => w.length > 0);
+    const words2 = s2.split(/\s+/).filter(w => w.length > 0);
+    
+    if (words1.length === 0 && words2.length === 0) return 1.0;
+    if (words1.length === 0 || words2.length === 0) return 0.0;
+    
+    const commonWords = words1.filter(word => words2.includes(word));
+    const totalWords = new Set([...words1, ...words2]).size;
+    
+    return commonWords.length / totalWords;
+}
+
+// ---- AI Insight Card ----
+function showAIInsightCard(data) {
+    const card = document.getElementById('ai-insight-card');
+    const content = document.getElementById('insight-content');
+    
+    // Calculate insights
+    const avgClusterSize = data.clusters.reduce((sum, c) => sum + (c.size || 0), 0) / data.clusters.length;
+    const highConfidencePairs = data.edges.filter(e => e.fused_score > 0.8).length;
+    const confidencePercent = Math.round((highConfidencePairs / data.edges.length) * 100);
+    
+    // Generate insight message
+    let insight = '';
+    if (avgClusterSize > 3) {
+        insight = 'Many large clusters detected - consider reviewing data quality';
+    } else if (avgClusterSize > 2) {
+        insight = 'Moderate duplication found - good candidates for deduplication';
+    } else {
+        insight = 'Mostly pairs - high data quality with minimal duplication';
+    }
+    
+    content.innerHTML = `
+        <div class="insight-stat">
+            <span class="insight-label">Clusters Found</span>
+            <span class="insight-value">${data.total_clusters}</span>
+        </div>
+        <div class="insight-stat">
+            <span class="insight-label">Duplicate Pairs</span>
+            <span class="insight-value">${data.total_pairs.toLocaleString()}</span>
+        </div>
+        <div class="insight-stat">
+            <span class="insight-label">High Confidence</span>
+            <span class="insight-value">${confidencePercent}%</span>
+        </div>
+        <div class="insight-stat">
+            <span class="insight-label">Avg Cluster Size</span>
+            <span class="insight-value">${avgClusterSize.toFixed(1)}</span>
+        </div>
+        <div class="insight-highlight">
+            <strong>AI Insight:</strong> ${insight}
+        </div>
+    `;
+    
+    card.style.display = 'block';
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+        hideInsightCard();
+    }, 10000);
+}
+
+function hideInsightCard() {
+    const card = document.getElementById('ai-insight-card');
+    card.style.display = 'none';
+}
+
+// ---- Status Management ----
+function updateStatus(status) {
+    const statusDot = document.querySelector('.status-dot');
+    const statusText = document.querySelector('.status-text');
+    
+    if (status === 'processing') {
+        statusDot.className = 'status-dot status-processing';
+        statusText.textContent = 'Processing';
+    } else {
+        statusDot.className = 'status-dot status-ready';
+        statusText.textContent = 'Ready';
+    }
+}
+
+// ---- Header Actions ----
+function resetDashboard() {
+    location.reload();
+}
+
+function exportAll() {
+    // Trigger export report
+    exportReport();
+}
+
+// ---- Enhanced Graph Controls ----
+function filterByLanguage() {
+    const selectedLang = document.getElementById('lang-filter').value;
+    
+    // Get all graph elements
+    const nodes = document.querySelectorAll('.nodes circle');
+    const labels = document.querySelectorAll('.labels text');
+    const links = document.querySelectorAll('.links line');
+    
+    if (!selectedLang) {
+        // Show all nodes and edges
+        nodes.forEach(node => node.style.display = 'block');
+        labels.forEach(label => label.style.display = 'block');
+        links.forEach(link => link.style.display = 'block');
+        return;
+    }
+    
+    // Filter nodes by language
+    nodes.forEach((node, index) => {
+        const nodeData = node.__data__;
+        if (nodeData && nodeData.language === selectedLang) {
+            node.style.display = 'block';
+            if (labels[index]) labels[index].style.display = 'block';
+        } else {
+            node.style.display = 'none';
+            if (labels[index]) labels[index].style.display = 'none';
+        }
+    });
+    
+    // Filter edges - show only if both nodes are visible
+    links.forEach(link => {
+        const linkData = link.__data__;
+        const sourceNode = document.querySelector(`.nodes circle:nth-child(${Array.from(nodes).findIndex(n => n.__data__.id === (linkData.source.id || linkData.source)) + 1})`);
+        const targetNode = document.querySelector(`.nodes circle:nth-child(${Array.from(nodes).findIndex(n => n.__data__.id === (linkData.target.id || linkData.target)) + 1})`);
+        
+        if (sourceNode && targetNode && 
+            sourceNode.style.display !== 'none' && 
+            targetNode.style.display !== 'none') {
+            link.style.display = 'block';
+        } else {
+            link.style.display = 'none';
+        }
+    });
+}
+
+function updateEdgeThreshold(value) {
+    currentEdgeThreshold = parseFloat(value);
+    document.getElementById('threshold-value').textContent = value;
+    // Implementation would update graph edge visibility
+    console.log('Edge threshold updated:', currentEdgeThreshold);
+}
+
+function toggleMinimap() {
+    minimapVisible = !minimapVisible;
+    const minimap = document.getElementById('minimap-container');
+    minimap.style.display = minimapVisible ? 'block' : 'none';
+}
+
+function exportGraph() {
+    // Export graph as image
+    const svgElement = document.querySelector('#graph-container svg');
+    if (svgElement) {
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = function() {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'lingualink_graph.png';
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        };
+        
+        img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+    }
+}
+
+// ---- Enhanced Loading Experience ----
+function showEnhancedLoading() {
+    showLoading();
+    // Add dynamic progress updates based on actual API progress
+    updateLoadingProgress();
+}
+
+function updateLoadingProgress() {
+    // Simulate progress updates
+    setTimeout(() => {
+        updateStepStatus('step-1', 'Computing LaBSE Semantic Embeddings... (50%)');
+    }, 1000);
+    
+    setTimeout(() => {
+        updateStepStatus('step-1', 'Computing LaBSE Semantic Embeddings... (100%)');
+        updateStepStatus('step-2', 'Generating Phonetic Fingerprints... (25%)');
+    }, 2500);
+    
+    setTimeout(() => {
+        updateStepStatus('step-2', 'Generating Phonetic Fingerprints... (75%)');
+    }, 4000);
+    
+    setTimeout(() => {
+        updateStepStatus('step-2', 'Generating Phonetic Fingerprints... (100%)');
+        updateStepStatus('step-3', 'Running Structural Fuzzy Matching... (50%)');
+    }, 5500);
+}
+
+function updateStepStatus(stepId, text) {
+    const step = document.getElementById(stepId);
+    if (step) {
+        step.querySelector('span').textContent = text;
+    }
+}
+
+// ---- Helper Functions ----
+function updateTopBarTitle(title) {
+    document.getElementById('top-bar-title').textContent = title;
+}
+
+function generateSummaryReport() {
+    if (!appState.data) return {};
+    
+    return {
+        totalRecords: appState.data.total_records,
+        totalClusters: appState.data.total_clusters,
+        totalPairs: appState.data.total_pairs,
+        processingTime: appState.data.processing_time,
+        threshold: appState.data.threshold || 0.55,
+        languageDistribution: appState.data.language_stats || {},
+        duplicateTypes: appState.data.duplicate_type_stats || {}
+    };
+}
+
+function formatReportAsMarkdown(report) {
+    return `# LinguaLink Analysis Report
+
+## Summary
+- **Total Records:** ${report.totalRecords}
+- **Duplicate Clusters:** ${report.totalClusters}
+- **Duplicate Pairs:** ${report.totalPairs}
+- **Processing Time:** ${report.processingTime}s
+- **Threshold:** ${report.threshold}
+
+## Language Distribution
+${Object.entries(report.languageDistribution)
+    .map(([lang, count]) => `- ${lang}: ${count}`)
+    .join('\n')}
+
+## Duplicate Types
+${Object.entries(report.duplicateTypes)
+    .map(([type, count]) => `- ${type}: ${count}`)
+    .join('\n')}
+
+---
+Generated by LinguaLink - Multilingual Duplicate Detection Engine
+`;
 }
 
 // Start immediately

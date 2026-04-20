@@ -45,10 +45,19 @@ function renderGraph(data) {
         .attr('width', width)
         .attr('height', height);
     
-    // Gradient defs
+    // Premium gradient defs
     const defs = svg.append('defs');
     
-    // Glow filter
+    // Premium glow filter
+    const premiumGlow = defs.append('filter').attr('id', 'premium-glow');
+    premiumGlow.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredBlur');
+    premiumGlow.append('feGaussianBlur').attr('stdDeviation', '2').attr('result', 'coloredBlur2');
+    premiumGlow.append('feMerge').attr('height', '130%').attr('width', '130%')
+        .selectAll('feMergeNode')
+        .data(['coloredBlur2', 'coloredBlur', 'SourceGraphic'])
+        .enter().append('feMergeNode').attr('in', d => d);
+    
+    // Original glow filter (for compatibility)
     const filter = defs.append('filter').attr('id', 'glow');
     filter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'coloredBlur');
     const feMerge = filter.append('feMerge');
@@ -85,9 +94,47 @@ function renderGraph(data) {
             return 'rgba(255, 255, 255, 0.1)';
         })
         .attr('stroke-width', d => Math.max(0.5, d.fused_score * 3))
-        .attr('stroke-linecap', 'round');
+        .attr('stroke-linecap', 'round')
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event, d) {
+            const sid = typeof d.source === 'object' ? d.source.id : d.source;
+            const tid = typeof d.target === 'object' ? d.target.id : d.target;
+            const sourceName = data.records[sid]?.name || `Record ${sid}`;
+            const targetName = data.records[tid]?.name || `Record ${tid}`;
+            
+            tooltip.innerHTML = `
+                <div class="tooltip-title">Duplicate Pair</div>
+                <div class="tooltip-row"><span class="tooltip-label">Source:</span><span class="tooltip-value">${escapeHtml(sourceName)}</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Target:</span><span class="tooltip-value">${escapeHtml(targetName)}</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Fused:</span><span class="tooltip-value">${(d.fused_score * 100).toFixed(1)}%</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Semantic:</span><span class="tooltip-value">${(d.semantic * 100).toFixed(0)}%</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Phonetic:</span><span class="tooltip-value">${(d.phonetic * 100).toFixed(0)}%</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Structural:</span><span class="tooltip-value">${(d.structural * 100).toFixed(0)}%</span></div>
+                <div class="tooltip-row"><span class="tooltip-label" style="color: var(--accent-cyan);">💡 Click for detailed analysis</span></div>
+            `;
+            
+            const rect = tooltip.getBoundingClientRect();
+            tooltip.style.left = (event.pageX + 10) + 'px';
+            tooltip.style.top = (event.pageY - rect.height - 10) + 'px';
+            tooltip.style.display = 'block';
+        })
+        .on('mouseleave', function() {
+            tooltip.style.display = 'none';
+        })
+        .on('click', function(event, d) {
+            event.stopPropagation();
+            const edgeData = {
+                source: typeof d.source === 'object' ? d.source.id : d.source,
+                target: typeof d.target === 'object' ? d.target.id : d.target,
+                semantic_score: d.semantic,
+                phonetic_score: d.phonetic,
+                structural_score: d.structural,
+                fused_score: d.fused_score
+            };
+            showExplainability(null, edgeData);
+        });
     
-    // Nodes
+    // Nodes with premium effects
     const node = g.append('g')
         .attr('class', 'nodes')
         .selectAll('circle')
@@ -95,15 +142,16 @@ function renderGraph(data) {
         .join('circle')
         .attr('r', d => {
             const clusterSize = data.clusters.find(c => c.cluster_id === d.cluster_id)?.size || 1;
-            return Math.max(5, Math.min(14, 4 + clusterSize * 0.8));
+            return Math.max(6, Math.min(16, 5 + clusterSize * 0.8));
         })
         .attr('fill', d => getLangColor(d.language))
         .attr('stroke', d => getLangColor(d.language))
-        .attr('stroke-width', 2)
-        .attr('stroke-opacity', 0.3)
-        .attr('fill-opacity', 0.85)
+        .attr('stroke-width', 3)
+        .attr('stroke-opacity', 0.4)
+        .attr('fill-opacity', 0.9)
         .style('cursor', 'pointer')
-        .style('filter', 'url(#glow)')
+        .style('filter', 'url(#premium-glow)')
+        .style('transition', 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)')
         .call(drag(simulation));
     
     // Labels
