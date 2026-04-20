@@ -87,8 +87,13 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Sample Size</label>
-                        <input type="number" id="sample-size" value="200" min="50" max="1000" step="50" class="form-control">
+                        <label for="sample-size">Sample Size</label>
+                        <select id="sample-size">
+                            <option value="50" selected>50 records (fast)</option>
+                            <option value="100">100 records (medium)</option>
+                            <option value="200">200 records (slow)</option>
+                            <option value="500">500 records (very slow)</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Threshold</label>
@@ -120,6 +125,50 @@
 
             <div class="sidebar-divider"></div>
 
+            <!-- View Mode & Export -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span class="section-icon">👁️</span>
+                    <span class="section-label">View Mode</span>
+                </div>
+                <div class="view-toggle">
+                    <button class="toggle-btn active" id="view-before" onclick="setViewMode('before')">
+                        <span class="toggle-icon">📊</span>
+                        <span>Before</span>
+                    </button>
+                    <button class="toggle-btn" id="view-after" onclick="setViewMode('after')">
+                        <span class="toggle-icon">🎯</span>
+                        <span>After</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Export Options -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span class="section-icon">📤</span>
+                    <span class="section-label">Export Results</span>
+                </div>
+                <div class="export-buttons">
+                    <button class="btn-export" onclick="exportCleanedData()" disabled id="export-cleaned">
+                        <span class="btn-icon">🧹</span>
+                        Cleaned Data (CSV)
+                    </button>
+                    <button class="btn-export" onclick="exportClusters()" disabled id="export-clusters">
+                        <span class="btn-icon">🔗</span>
+                        Clusters (JSON)
+                    </button>
+                    <button class="btn-export" onclick="exportReport()" disabled id="export-report">
+                        <span class="btn-icon">📄</span>
+                        Summary Report
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
             <!-- Live Search -->
             <div class="sidebar-section sidebar-search">
                 <div class="section-header">
@@ -131,6 +180,43 @@
                     <button id="btn-search" onclick="searchDuplicates()">→</button>
                 </div>
                 <div id="search-results" class="search-results"></div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- AI Summary -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span class="section-icon">🤖</span>
+                    <span class="section-label">AI Summary</span>
+                </div>
+                <div id="ai-summary" class="ai-summary">
+                    <div class="summary-placeholder">
+                        <span class="summary-icon">📊</span>
+                        <span>Run analysis to see AI insights</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Test Playground -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span class="section-icon">🧪</span>
+                    <span class="section-label">Test Playground</span>
+                </div>
+                <div class="test-playground">
+                    <div class="test-inputs">
+                        <input type="text" id="test-input-1" placeholder="Enter first text..." class="test-input">
+                        <input type="text" id="test-input-2" placeholder="Enter second text..." class="test-input">
+                    </div>
+                    <button class="btn-test" onclick="runTestComparison()" id="btn-test">
+                        <span class="btn-icon">⚡</span>
+                        Compare
+                    </button>
+                    <div id="test-results" class="test-results" style="display:none"></div>
+                </div>
             </div>
 
             <!-- Methodology (collapsible) -->
@@ -159,10 +245,41 @@
         </aside>
 
         <!-- ═══ MAIN PANEL ═══ -->
-        <main class="main-panel">
-
-            <!-- Top Bar -->
-            <div class="top-bar">
+        <div class="main-panel">
+    <!-- Premium Header Bar -->
+    <header class="premium-header">
+        <div class="header-left">
+            <div class="header-title">
+                <h2>LinguaLink AI</h2>
+                <span class="header-subtitle">Multilingual Duplicate Detection</span>
+            </div>
+        </div>
+        <div class="header-center">
+            <div class="status-indicator">
+                <div class="status-dot status-ready"></div>
+                <span class="status-text">Ready</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <button class="header-btn primary" onclick="loadDemo()">
+                <span class="btn-icon"></span>
+                Run Analysis
+            </button>
+            <button class="header-btn secondary" onclick="resetDashboard()">
+                <span class="btn-icon"></span>
+                Reset
+            </button>
+            <button class="header-btn secondary" onclick="exportAll()">
+                <span class="btn-icon"></span>
+                Export
+            </button>
+        </div>
+    </header>
+    
+    <div class="top-bar" style="display: none;">
+        <div id="top-bar-title">LinguaLink AI Dashboard</div>
+    </div>
+    <div class="top-bar">
                 <div class="top-bar-left">
                     <span id="top-bar-title" class="top-bar-title">Ready — select a dataset and click Run Analysis</span>
                 </div>
@@ -182,6 +299,18 @@
                 </div>
             </div>
 
+            <!-- Floating AI Insight Card -->
+            <div class="ai-insight-card" id="ai-insight-card" style="display: none;">
+                <div class="insight-header">
+                    <div class="insight-icon">AI</div>
+                    <div class="insight-title">Intelligent Analysis</div>
+                    <button class="insight-close" onclick="hideInsightCard()">×</button>
+                </div>
+                <div class="insight-content" id="insight-content">
+                    <!-- Dynamic content will be inserted here -->
+                </div>
+            </div>
+
             <!-- Empty State -->
             <div class="empty-state" id="empty-state">
                 <div class="empty-icon">🌐</div>
@@ -197,13 +326,34 @@
             <!-- Graph Panel -->
             <div class="viz-panel" id="panel-graph" style="display:none">
                 <div class="graph-controls">
-                    <div class="legend" id="language-legend"></div>
-                    <div class="graph-actions">
-                        <button class="btn-icon" onclick="resetGraph()" title="Reset zoom">↺</button>
-                        <button class="btn-icon" onclick="toggleLabels()" title="Toggle labels">Aa</button>
+                    <div class="control-group">
+                        <div class="legend" id="language-legend"></div>
+                        <div class="language-filter">
+                            <select id="lang-filter" class="filter-select" onchange="filterByLanguage()">
+                                <option value="">All Languages</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <div class="threshold-control">
+                            <label class="control-label">Edge Threshold:</label>
+                            <input type="range" id="edge-threshold" min="0.3" max="0.95" step="0.05" value="0.55" onchange="updateEdgeThreshold(this.value)">
+                            <span id="threshold-value">0.55</span>
+                        </div>
+                        <div class="graph-actions">
+                            <button class="btn-icon" onclick="resetGraph()" title="Reset zoom">↺</button>
+                            <button class="btn-icon" onclick="toggleLabels()" title="Toggle labels">Aa</button>
+                            <button class="btn-icon" onclick="toggleMinimap()" title="Toggle minimap">⊞</button>
+                            <button class="btn-icon" onclick="exportGraph()" title="Export graph">📷</button>
+                        </div>
                     </div>
                 </div>
-                <div id="graph-container" class="graph-container"></div>
+                <div class="graph-wrapper">
+                    <div id="graph-container" class="graph-container"></div>
+                    <div id="minimap-container" class="minimap-container" style="display:none">
+                        <div class="minimap-viewport"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Heatmap Panel -->
@@ -249,6 +399,91 @@
             </div>
 
         </main>
+    </div>
+
+    <!-- AI Explainability Panel -->
+    <div id="explainability-panel" class="explainability-panel" style="display:none">
+        <div class="explainability-header">
+            <h3>🧠 AI Explainability</h3>
+            <button class="close-btn" onclick="closeExplainability()">×</button>
+        </div>
+        <div class="explainability-content">
+            <div class="explainability-section">
+                <h4>📊 Match Analysis</h4>
+                <div class="match-details">
+                    <div class="record-pair">
+                        <div class="record-card">
+                            <div class="record-name" id="explain-record-1-name"></div>
+                            <div class="record-meta">
+                                <span class="record-lang" id="explain-record-1-lang"></span>
+                                <span class="record-id" id="explain-record-1-id"></span>
+                            </div>
+                        </div>
+                        <div class="vs-divider">VS</div>
+                        <div class="record-card">
+                            <div class="record-name" id="explain-record-2-name"></div>
+                            <div class="record-meta">
+                                <span class="record-lang" id="explain-record-2-lang"></span>
+                                <span class="record-id" id="explain-record-2-id"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="explainability-section">
+                <h4>🎯 Signal Breakdown</h4>
+                <div class="signal-breakdown">
+                    <div class="signal-item">
+                        <div class="signal-header">
+                            <span class="signal-icon">🧠</span>
+                            <span class="signal-name">Semantic Similarity</span>
+                            <span class="signal-score" id="semantic-score"></span>
+                        </div>
+                        <div class="signal-bar">
+                            <div class="signal-fill semantic-fill" id="semantic-fill"></div>
+                        </div>
+                        <div class="signal-explanation" id="semantic-explanation"></div>
+                    </div>
+                    
+                    <div class="signal-item">
+                        <div class="signal-header">
+                            <span class="signal-icon">🔊</span>
+                            <span class="signal-name">Phonetic Similarity</span>
+                            <span class="signal-score" id="phonetic-score"></span>
+                        </div>
+                        <div class="signal-bar">
+                            <div class="signal-fill phonetic-fill" id="phonetic-fill"></div>
+                        </div>
+                        <div class="signal-explanation" id="phonetic-explanation"></div>
+                    </div>
+                    
+                    <div class="signal-item">
+                        <div class="signal-header">
+                            <span class="signal-icon">📝</span>
+                            <span class="signal-name">Structural Similarity</span>
+                            <span class="signal-score" id="structural-score"></span>
+                        </div>
+                        <div class="signal-bar">
+                            <div class="signal-fill structural-fill" id="structural-fill"></div>
+                        </div>
+                        <div class="signal-explanation" id="structural-explanation"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="explainability-section">
+                <h4>⚖️ Final Verdict</h4>
+                <div class="verdict-container">
+                    <div class="verdict-score">
+                        <span class="verdict-label">Fused Score:</span>
+                        <span class="verdict-value" id="fused-score"></span>
+                    </div>
+                    <div class="verdict-badge" id="verdict-badge"></div>
+                    <div class="verdict-reasoning" id="verdict-reasoning"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Loading Overlay -->
