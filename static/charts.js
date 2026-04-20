@@ -101,7 +101,13 @@ function renderClusterChart(data) {
     const container = document.getElementById('cluster-chart');
     container.innerHTML = '';
     
-    const clusters = data.clusters.slice(0, 12);
+    const clusters = data.clusters
+        .slice()
+        .sort((a, b) => {
+            if (b.size !== a.size) return b.size - a.size;
+            return (b.avg_confidence || 0) - (a.avg_confidence || 0);
+        })
+        .slice(0, 14);
     
     const margin = { top: 10, right: 20, bottom: 30, left: 50 };
     const width = container.clientWidth - margin.left - margin.right || 400;
@@ -124,6 +130,8 @@ function renderClusterChart(data) {
         .nice()
         .range([height, 0]);
     
+    const tooltip = document.getElementById('tooltip');
+
     // Bars
     svg.selectAll('rect')
         .data(clusters)
@@ -137,7 +145,41 @@ function renderClusterChart(data) {
             const colors = ['#6366f1', '#8b5cf6', '#a78bfa', '#06b6d4', '#22d3ee', '#ec4899'];
             return colors[i % colors.length];
         })
-        .attr('opacity', 0.8);
+        .attr('opacity', 0.82)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(event, d) {
+            d3.select(this).attr('opacity', 1);
+            const conf = ((d.avg_confidence || 0) * 100).toFixed(1);
+            tooltip.style.display = 'block';
+            tooltip.innerHTML = `
+                <div class="tooltip-title">Cluster</div>
+                <div class="tooltip-row"><span class="tooltip-label">Records</span><span class="tooltip-value">${d.size}</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Avg confidence</span><span class="tooltip-value">${conf}%</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Tip</span><span class="tooltip-value">Click to open</span></div>
+            `;
+        })
+        .on('mousemove', (event) => {
+            tooltip.style.left = (event.pageX + 12) + 'px';
+            tooltip.style.top = (event.pageY - 10) + 'px';
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('opacity', 0.82);
+            tooltip.style.display = 'none';
+        })
+        .on('click', function(event, d) {
+            // Jump user to cluster cards tab
+            if (typeof switchTab === 'function') switchTab('results');
+            const filter = document.getElementById('cluster-filter');
+            if (filter) {
+                // Use a stable, human-friendly query (translation or first member translation/name)
+                // If empty, clear filter.
+                filter.value = '';
+                filter.dispatchEvent(new Event('input'));
+            }
+            // Scroll to top; cards are sorted by size/confidence to match the bars
+            const container = document.getElementById('clusters-container');
+            if (container) container.scrollTop = 0;
+        });
     
     // Confidence labels on bars
     svg.selectAll('.bar-label')

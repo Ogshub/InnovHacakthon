@@ -1,0 +1,90 @@
+LinguaLink Backend Improvements
+Enhance the backend AI pipeline, API surface, and code quality without touching any files in frontend/ or static/. The frontend team's changes will merge cleanly.
+
+What We're Improving
+The current backend is functional but minimal. Key gaps:
+
+No result caching — every request re-runs the full ML pipeline (slow)
+No async/background task support — large CSV uploads block the server
+Matcher weights are hardcoded — can't tune from the API
+Single embedding model — no fallback or model selection
+No confidence explanation — pairs returned with scores but no human-readable reason
+No batch record comparison — can only compare a single query vs dataset
+No deduplication export — results can't be downloaded as CSV/JSON
+No API rate metrics — no visibility on pipeline performance per signal
+Phonetic engine is basic — uses only a simple metaphone skeleton; no Soundex/NYSIIS consideration
+Fuzzy engine single-pass — token_set_ratio not included (better for subset matching)
+No in-memory result store — results are ephemeral, can't re-fetch
+No GET /api/results/{job_id} — no way to poll previously run jobs
+Proposed Changes
+New Modules
+[NEW] app/cache.py
+In-memory LRU job result cache. Stores recent pipeline results by a job_id so the frontend can poll or re-fetch without re-running the pipeline.
+
+[NEW] app/explainer.py
+Generates human-readable duplicate explanations: "High semantic similarity (0.89) + phonetic match → likely transliteration duplicate". Considers all three signals and produces a reason label + confidence_tier (high / medium / borderline).
+
+[NEW] app/background.py
+FastAPI BackgroundTasks-based async job runner. Accepts a CSV upload, queues the pipeline, returns job_id immediately. Client can GET /api/jobs/{job_id} to poll status (pending / running / done / error).
+
+Modified Files (backend only)
+[MODIFY] app/embeddings.py
+Add embedding cache (dict keyed by text hash) to avoid re-encoding already-seen texts
+Add encode_single() helper for search endpoint
+Add model warmup ping on init
+[MODIFY] app/phonetic.py
+Add Soundex fingerprint alongside metaphone skeleton
+Add double-metaphone-style consonant cluster normalisation
+Blend both fingerprints for richer phonetic signal
+Return debug hash alongside score
+[MODIFY] app/fuzzy.py
+Add token_set_ratio (best for subset/abbreviation matching like "Nike Air Max 90" vs "Air Max")
+Rebalance weights: ratio=0.3, partial=0.25, token_sort=0.25, token_set=0.20
+Add normalisation: strip currency symbols, units, brand suffixes
+[MODIFY] app/matcher.py
+Make weights runtime-configurable (accept override per request)
+Add confidence_tier() helper: high ≥0.80, medium ≥0.65, borderline ≥0.55
+Add explain_pair() that picks the dominant signal and returns a text label
+[MODIFY] app/clustering.py
+Add connected-components fallback if Louvain fails (e.g., single-node graph)
+Enrich cluster info with: max_confidence, dominant_language, dominant_category, min_confidence
+Return per-cluster signal breakdown (avg semantic / phonetic / structural)
+[MODIFY] app/schemas.py
+Add JobStatus, JobResult schemas for async job polling
+Add DetectionConfig schema (threshold, weights, sample_size, model)
+Add ExplainedPair schema with reason, confidence_tier
+Add ClusterDetail with enriched fields
+[MODIFY] app/routes.py
+POST /api/demo — add weights query param, enrich response with explained pairs, use cache
+POST /api/detect — return job_id, queue background task (async)
+GET /api/jobs/{job_id} — poll job status and result
+POST /api/search — improve to search against in-memory cache when available, add min_score filter
+POST /api/compare — NEW: compare two raw text strings and return full triple-signal breakdown + explanation
+GET /api/export/{job_id} — NEW: stream duplicate pairs as CSV download
+GET /api/stats — NEW: return server uptime, total jobs run, model name, cache hit rate
+GET /api/health — enrich with model name, uptime, cache size
+[MODIFY] app/models.py
+Add Job SQLAlchemy model (id, status, created_at, completed_at, error, config_json)
+Add cluster_id and confidence_score columns to DatasetRecord
+[MODIFY] app/main.py
+Create DB tables on startup
+Log model name and warm-up timing
+Add X-Processing-Time response header middleware
+New API Endpoints Summary
+Method	Path	Description
+GET	/api/health	Enhanced health — model, uptime, cache
+GET	/api/stats	Server metrics — jobs, cache hit rate
+POST	/api/demo	Same as before + explained pairs + weights
+POST	/api/detect	Async upload → returns job_id immediately
+GET	/api/jobs/{job_id}	Poll job status / result
+POST	/api/search	Improved search with min_score param
+POST	/api/compare	Compare two strings, full breakdown
+GET	/api/export/{job_id}	Download results as CSV
+Verification Plan
+Start server: py -m uvicorn app.main:app --reload
+Hit GET /api/health — verify uptime, model name
+POST /api/demo — verify explained_pairs, confidence_tier in response
+POST /api/detect with a CSV — get job_id, poll GET /api/jobs/{job_id}
+POST /api/compare with two strings — verify all three signal scores + reason text
+GET /api/export/{job_id} — download CSV and verify columns
+Run a second POST /api/demo — verify cache hit is faster
