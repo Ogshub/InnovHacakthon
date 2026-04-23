@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="LinguaLink — AI-powered multilingual duplicate record detection using triple-signal matching and graph clustering">
+    <meta name="theme-color" content="#10b981">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>LinguaLink — Multilingual Duplicate Detection</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,6 +27,13 @@
 
         <!-- ═══ SIDEBAR ═══ -->
         <aside class="sidebar" id="sidebar">
+            <!-- Mobile Menu Toggle -->
+            <button class="mobile-menu-toggle" id="mobile-menu-toggle" onclick="toggleMobileSidebar()" aria-label="Toggle menu">
+                <span class="hamburger"></span>
+                <span class="hamburger"></span>
+                <span class="hamburger"></span>
+            </button>
+            
             <!-- Logo -->
             <div class="sidebar-logo">
                 <div class="logo-icon">
@@ -164,6 +175,13 @@
             <!-- Top Bar -->
             <div class="top-bar">
                 <div class="top-bar-left">
+                    <button class="mobile-sidebar-btn" id="mobile-sidebar-btn" onclick="toggleMobileSidebar()" aria-label="Open sidebar" style="display:none">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </button>
                     <span id="top-bar-title" class="top-bar-title">Ready — select a dataset and click Run Analysis</span>
                 </div>
                 <div class="top-bar-right" id="viz-tabs-bar" style="display:none">
