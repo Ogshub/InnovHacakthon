@@ -6,6 +6,7 @@ const API_BASE = '';  // Same origin
 let appState = {
     data: null,
     showLabels: true,
+    mobileSidebarOpen: false,
 };
 
 function buildRecordIndex(records) {
@@ -63,6 +64,69 @@ const LANG_COLORS = {
 function getLangColor(lang) {
     return LANG_COLORS[lang] || '#888';
 }
+
+// ---- Mobile Sidebar Toggle ----
+function toggleMobileSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('mobile-menu-toggle');
+    
+    appState.mobileSidebarOpen = !appState.mobileSidebarOpen;
+    
+    if (appState.mobileSidebarOpen) {
+        sidebar.classList.remove('collapsed');
+        toggle.classList.add('active');
+        // Prevent body scroll when sidebar is open
+        document.body.style.overflow = 'hidden';
+    } else {
+        sidebar.classList.add('collapsed');
+        toggle.classList.remove('active');
+        // Restore body scroll
+        document.body.style.overflow = '';
+    }
+}
+
+// Close sidebar when clicking outside on mobile
+function handleMobileClickOutside(event) {
+    if (window.innerWidth <= 640 && appState.mobileSidebarOpen) {
+        const sidebar = document.getElementById('sidebar');
+        const toggle = document.getElementById('mobile-menu-toggle');
+        
+        if (!sidebar.contains(event.target) && !toggle.contains(event.target)) {
+            toggleMobileSidebar();
+        }
+    }
+}
+
+// Handle window resize
+function handleWindowResize() {
+    if (window.innerWidth > 640 && appState.mobileSidebarOpen) {
+        // Close mobile sidebar on desktop resize
+        const sidebar = document.getElementById('sidebar');
+        const toggle = document.getElementById('mobile-menu-toggle');
+        sidebar.classList.remove('collapsed');
+        toggle.classList.remove('active');
+        appState.mobileSidebarOpen = false;
+        document.body.style.overflow = '';
+    }
+}
+
+// Initialize mobile event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Add click outside handler
+    document.addEventListener('click', handleMobileClickOutside);
+    
+    // Add resize handler
+    window.addEventListener('resize', handleWindowResize);
+    
+    // Initialize sidebar state on mobile
+    if (window.innerWidth <= 640) {
+        const sidebar = document.getElementById('sidebar');
+        const toggle = document.getElementById('mobile-menu-toggle');
+        sidebar.classList.add('collapsed');
+        toggle.classList.remove('active');
+        appState.mobileSidebarOpen = false;
+    }
+});
 
 // ---- Loading Animation ----
 let loadingInterval = null;
