@@ -91,10 +91,16 @@ InnovHacakthon/
 │   ├── graph.js             # Network visualization
 │   ├── heatmap.js           # Similarity heatmap
 │   └── charts.js            # Analytics charts
-├── 📁 frontend/             # Optional React frontend
-└── 📊 datasets/             # Sample multilingual datasets
-    ├── ultra_complex_multilingual_dataset.csv
-    └── ecommerce_multilingual.csv
+├── 📁 data/                  # Restructured dataset directory
+│   ├── ultra_complex_multilingual_dataset.csv
+│   └── ecommerce_multilingual.csv
+├── 📁 docs/                  # Documentation and reference PDFs
+│   └── Innov8-PS.pdf
+└── 📁 scripts/               # Helper and setup scripts
+    ├── generate_dataset.py
+    ├── read_pdf.py
+    ├── setup_and_run.bat
+    └── setup_and_run.sh
 ```
 
 ---

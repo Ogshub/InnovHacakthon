@@ -492,11 +492,21 @@ Innov8Project/
 │   ├── package.json
 │   └── vite.config.ts
 │
-├── ultra_complex_multilingual_dataset.csv   # Primary demo dataset (21K+ records, 20+ languages)
-├── ecommerce_multilingual.csv               # E-commerce product catalog dataset
-├── generate_dataset.py                     # Script used to generate the datasets
-├── requirements.txt                        # Python dependencies
-└── README.md                               # This file
+├── data/                         # Restructured datasets directory
+│   ├── ultra_complex_multilingual_dataset.csv   # Primary demo dataset (21K+ records, 20+ languages)
+│   └── ecommerce_multilingual.csv               # E-commerce product catalog dataset
+│
+├── docs/                         # Documentation and reference PDFs
+│   └── Innov8-PS.pdf             # Hackathon Problem Statement PDF
+│
+├── scripts/                      # Utility and setup helper scripts
+│   ├── generate_dataset.py       # Script used to generate the datasets
+│   ├── read_pdf.py               # PDF parser helper utility
+│   ├── setup_and_run.bat         # Redundant one-click bat script
+│   └── setup_and_run.sh          # Redundant one-click sh script
+│
+├── requirements.txt              # Python dependencies
+└── README.md                     # This file
 ```
 
 ---
