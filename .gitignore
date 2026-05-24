@@ -54,3 +54,10 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# ── Databases ───────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+lingualink.db
+
