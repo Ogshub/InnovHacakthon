@@ -95,8 +95,11 @@ def generate_ecommerce_dataset():
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
     
     # Save
-    df.to_csv("ecommerce_multilingual.csv", index=False)
-    print(f"Generated {len(df)} records in ecommerce_multilingual.csv")
+    import os
+    out_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    os.makedirs(out_dir, exist_ok=True)
+    df.to_csv(os.path.join(out_dir, "ecommerce_multilingual.csv"), index=False)
+    print(f"Generated {len(df)} records in data/ecommerce_multilingual.csv")
 
 if __name__ == "__main__":
     generate_ecommerce_dataset()

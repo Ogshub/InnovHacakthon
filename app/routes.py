@@ -171,7 +171,8 @@ async def run_demo(
         if dataset not in ["ultra_complex_multilingual_dataset.csv", "ecommerce_multilingual.csv"]:
             dataset = "ultra_complex_multilingual_dataset.csv"
             
-        df = pd.read_csv(dataset)
+        import os
+        df = pd.read_csv(os.path.join("data", dataset))
         result = _run_pipeline(df, sample_size=sample_size, threshold=threshold)
         return JSONResponse(content=result)
     except Exception as e:
@@ -212,7 +213,8 @@ async def detect_duplicates(
 async def search_duplicates(query: str = Form(...)):
     """Search for duplicates of a single query term in the demo dataset."""
     try:
-        df = pd.read_csv("ultra_complex_multilingual_dataset.csv")
+        import os
+        df = pd.read_csv(os.path.join("data", "ultra_complex_multilingual_dataset.csv"))
         # Sample a manageable subset
         if len(df) > 500:
             df = df.sample(n=500, random_state=42).reset_index(drop=True)
